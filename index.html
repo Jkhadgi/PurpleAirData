@@ -340,6 +340,24 @@
     return { label:"Hazardous", color:"var(--aqi-hazardous)" };
   }
 
+  // ---- US EPA correction for PurpleAir sensors --------------------------
+  // PurpleAir's own "US EPA PM2.5 AQI" layer doesn't feed raw PM2.5 straight
+  // into the AQI formula — it first applies EPA's published correction,
+  // which adjusts for how low-cost optical sensors overread in humid air.
+  // Source: US EPA / AirNow "PurpleAir correction" (2021), using the
+  // sensor's CF=1 reading and relative humidity.
+  function epaCorrectedPM25(pmCf1, rh){
+    if (pmCf1 == null || isNaN(pmCf1)) return null;
+    const humidity = (rh == null || isNaN(rh)) ? 50 : rh; // fallback if humidity missing
+    let corrected;
+    if (pmCf1 <= 343) {
+      corrected = 0.52 * pmCf1 - 0.085 * humidity + 5.71;
+    } else {
+      corrected = 0.46 * pmCf1 + 0.000393 * pmCf1 * pmCf1 + 2.97;
+    }
+    return Math.max(0, corrected);
+  }
+
   // ---- US EPA AQI conversion from PM2.5 (µg/m3) ------------------------
   // Standard EPA breakpoint table (2012 revision), instantaneous approximation.
   const AQI_BREAKPOINTS = [
@@ -374,9 +392,12 @@
   // ---- Parameter definitions for the map's "color by" control ---------
   const PARAM_DEFS = {
     "aqi": {
-      label: "AQI (US EPA)",
+      label: "AQI (US EPA, corrected)",
       unit: "AQI",
-      getValue: s => pm25ToAqi(s["pm2.5"] != null ? Number(s["pm2.5"]) : null),
+      getValue: s => pm25ToAqi(epaCorrectedPM25(
+        s["pm2.5_cf_1"] != null ? Number(s["pm2.5_cf_1"]) : null,
+        s.humidity != null ? Number(s.humidity) : null
+      )),
       colorFor: aqiValueColor,
       legend: [
         ["Good (0–50)", "#4caf50"],
@@ -507,7 +528,10 @@
         fillOpacity: 0.9,
       });
       const valueStr = value != null ? value.toFixed(1) + " " + def.unit : "no data";
-      const aqiVal = pm25ToAqi(s["pm2.5"] != null ? Number(s["pm2.5"]) : null);
+      const aqiVal = pm25ToAqi(epaCorrectedPM25(
+        s["pm2.5_cf_1"] != null ? Number(s["pm2.5_cf_1"]) : null,
+        s.humidity != null ? Number(s.humidity) : null
+      ));
       marker.bindPopup(
         `<div class="popup-name">${(s.name || "unnamed").toString().replace(/[<>]/g,"")}</div>` +
         `${def.label}: <strong>${valueStr}</strong><br/>` +
