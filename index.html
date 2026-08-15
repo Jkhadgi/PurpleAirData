@@ -280,6 +280,7 @@
       <div class="param-select">
         <label for="paramSelect">Color by</label>
         <select id="paramSelect">
+          <option value="aqi">AQI (US EPA)</option>
           <option value="pm2.5">PM2.5 (now)</option>
           <option value="pm2.5_10minute">PM2.5 (10-min avg)</option>
           <option value="temperature">Temperature</option>
@@ -339,8 +340,53 @@
     return { label:"Hazardous", color:"var(--aqi-hazardous)" };
   }
 
+  // ---- US EPA AQI conversion from PM2.5 (µg/m3) ------------------------
+  // Standard EPA breakpoint table (2012 revision), instantaneous approximation.
+  const AQI_BREAKPOINTS = [
+    { cLow: 0.0,   cHigh: 12.0,  iLow: 0,   iHigh: 50  },
+    { cLow: 12.1,  cHigh: 35.4,  iLow: 51,  iHigh: 100 },
+    { cLow: 35.5,  cHigh: 55.4,  iLow: 101, iHigh: 150 },
+    { cLow: 55.5,  cHigh: 150.4, iLow: 151, iHigh: 200 },
+    { cLow: 150.5, cHigh: 250.4, iLow: 201, iHigh: 300 },
+    { cLow: 250.5, cHigh: 350.4, iLow: 301, iHigh: 400 },
+    { cLow: 350.5, cHigh: 500.4, iLow: 401, iHigh: 500 },
+  ];
+
+  function pm25ToAqi(pm){
+    if (pm == null || isNaN(pm)) return null;
+    const clamped = Math.max(0, Math.min(500.4, pm));
+    const bp = AQI_BREAKPOINTS.find(b => clamped >= b.cLow && clamped <= b.cHigh)
+      || AQI_BREAKPOINTS[AQI_BREAKPOINTS.length - 1];
+    const aqi = ((bp.iHigh - bp.iLow) / (bp.cHigh - bp.cLow)) * (clamped - bp.cLow) + bp.iLow;
+    return Math.round(aqi);
+  }
+
+  function aqiValueColor(aqi){
+    if (aqi == null || isNaN(aqi)) return "#6b7c96";
+    if (aqi <= 50)  return "#4caf50";
+    if (aqi <= 100) return "#e8c73a";
+    if (aqi <= 150) return "#f2a93b";
+    if (aqi <= 200) return "#e0553f";
+    if (aqi <= 300) return "#9a4fb0";
+    return "#7e2030";
+  }
+
   // ---- Parameter definitions for the map's "color by" control ---------
   const PARAM_DEFS = {
+    "aqi": {
+      label: "AQI (US EPA)",
+      unit: "AQI",
+      getValue: s => pm25ToAqi(s["pm2.5"] != null ? Number(s["pm2.5"]) : null),
+      colorFor: aqiValueColor,
+      legend: [
+        ["Good (0–50)", "#4caf50"],
+        ["Moderate (51–100)", "#e8c73a"],
+        ["Sensitive (101–150)", "#f2a93b"],
+        ["Unhealthy (151–200)", "#e0553f"],
+        ["Very unhealthy (201–300)", "#9a4fb0"],
+        ["Hazardous (301+)", "#7e2030"],
+      ],
+    },
     "pm2.5": {
       label: "PM2.5 (µg/m³)",
       unit: "µg/m³",
@@ -461,9 +507,11 @@
         fillOpacity: 0.9,
       });
       const valueStr = value != null ? value.toFixed(1) + " " + def.unit : "no data";
+      const aqiVal = pm25ToAqi(s["pm2.5"] != null ? Number(s["pm2.5"]) : null);
       marker.bindPopup(
         `<div class="popup-name">${(s.name || "unnamed").toString().replace(/[<>]/g,"")}</div>` +
         `${def.label}: <strong>${valueStr}</strong><br/>` +
+        `AQI: ${aqiVal != null ? aqiVal : "—"}<br/>` +
         `PM2.5 now: ${s["pm2.5"] != null ? Number(s["pm2.5"]).toFixed(1) : "—"} µg/m³`
       );
       markerLayer.addLayer(marker);
