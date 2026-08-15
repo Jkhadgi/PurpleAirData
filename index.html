@@ -1,3 +1,82 @@
+
+Claude finished the response
+
+Thought for 40s
+Thought for 40s
+Good insight — let's separate two possible issues: (1) is the conversion actually happening, and (2) if it is, why do the final numbers still differ. Let me add the raw intermediate numbers to each popup so we can see exactly where things diverge, since PurpleAir's own popup also shows raw PM2.5 (that "Now / 10 Min / 30 Min..." table you saw earlier).
+
+
+Edited a file, read a file
+Edited a file, read a file
+Deploy this update the same way (GitHub → replace index.html → commit → let Netlify redeploy), then click on BGP Camp again on our map. The popup will now show the actual raw inputs: raw PM2.5 cf=1, raw PM2.5 atm, atm 10-min, and RH%.
+
+Before we go further, one important thing to check: is this really the same BGP Camp? PurpleAir often has multiple stations with similar names (e.g. "BGP CAMP A" vs "BGP CAMP B" as separate channels, or entirely different sensors that just share a location name). If you're comparing our marker to a different-but-similarly-named station on PurpleAir's map, the numbers will never match no matter how correct our formula is.
+
+Once you have both popups open side by side, could you send me:
+
+Our raw values (cf=1, atm, atm 10-min, RH%) from this new popup
+PurpleAir's own displayed raw values (the little Now/10Min/30Min table they show)
+That direct raw-input comparison will tell us immediately whether the gap is in the input data (wrong station, wrong field, timing) or the formula — rather than guessing further.
+
+
+Index
+Code · HTML 
+leavethi sthe previusindex you gave just before this rember?
+
+
+Thought for 4s
+Thought for 4s
+Got it — you want to go back to the version before I added the debug info in the popup. Let me revert that.
+
+
+Edited a file, read a file
+Edited a file, read a file
+Reverted — this file matches the version from before the debug info was added (popup just shows AQI now / AQI 10-min / PM2.5 now, no raw intermediate values). Same deploy step whenever you're ready: GitHub → replace index.html → commit → let Netlify redeploy.
+
+
+Index
+Code · HTML 
+both the aqi were corrected right? with US EPA
+
+Yes — both of them go through the same US EPA correction before being converted to AQI:
+
+AQI (real-time) — takes the instantaneous pm2.5_cf_1 reading, runs it through the EPA correction formula (adjusting for humidity), then converts that corrected PM2.5 into an AQI number using the official EPA breakpoint table.
+AQI (10-min avg) — takes that same CF=1 reading but scaled to reflect the 10-minute smoothing window, runs it through the exact same correction formula, then the exact same AQI breakpoint conversion.
+So the only difference between the two is which PM2.5 input they start from (instant vs. smoothed) — the correction step and the AQI conversion step are identical for both. Neither one skips the EPA correction; neither one is raw/uncorrected PM2.5 being mislabeled as AQI.
+
+so inthe bale below were ther ispM2.5, 10-min abg ,temp,humidity last seen,can we added AQi real corrected and raw simiarly AQI-10min ral corrected and raw
+
+
+Thought for 9s
+Thought for 9s
+Good idea — that'll let you directly compare corrected vs. raw side by side. Let me add those four columns to the table.
+
+
+Edited 3 files, read a file · 2 notes
+Edited 3 files, read a file · 2 notes
+Same deploy step: GitHub → replace index.html → commit → let Netlify redeploy.
+
+New columns in the table, between "10-min avg" and "Temp":
+
+AQI RT (corr.) — real-time, EPA-corrected
+AQI RT (raw) — real-time, straight PM2.5-to-AQI, no humidity correction
+AQI 10m (corr.) — 10-minute average, EPA-corrected
+AQI 10m (raw) — 10-minute average, no correction
+Each is color-coded with the same AQI dot you see on the map. This also gives you a built-in diagnostic: comparing "corr." vs "raw" side by side on the same row shows you exactly how much the humidity correction is shifting each station's number.
+
+
+Index
+Code · HTML 
+
+Want to be notified when Claude responds?
+
+
+
+
+Claude is AI and can make mistakes. Please double-check responses.
+
+
+Index · HTML
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -27,7 +106,7 @@
     --prayer-red: #c1443a;
     --paper:      #f2ede1;
     --muted:      #9fb0c8;
-
+ 
     --aqi-good:     #4caf50;
     --aqi-moderate: #e8c73a;
     --aqi-sensitive:#f2a93b;
@@ -35,7 +114,7 @@
     --aqi-very:     #9a4fb0;
     --aqi-hazardous:#7e2030;
   }
-
+ 
   *{ box-sizing:border-box; }
   html,body{ margin:0; padding:0; }
   body{
@@ -47,11 +126,11 @@
     min-height:100vh;
     padding:0 0 64px;
   }
-
+ 
   a{ color:var(--marigold); }
-
+ 
   .wrap{ max-width:1080px; margin:0 auto; padding:0 24px; }
-
+ 
   header.top{
     display:flex; align-items:flex-start; justify-content:space-between;
     gap:16px; padding:36px 0 8px; flex-wrap:wrap;
@@ -66,7 +145,7 @@
     letter-spacing:-0.01em;
   }
   .sub{ color:var(--muted); font-size:13px; margin-top:8px; max-width:520px; line-height:1.5; }
-
+ 
   .status{
     text-align:right; font-size:12px; color:var(--muted);
   }
@@ -75,7 +154,7 @@
     background:var(--aqi-good); margin-right:6px; box-shadow:0 0 8px var(--aqi-good);
   }
   .status.stale .dot{ background:var(--aqi-unhealthy); box-shadow:0 0 8px var(--aqi-unhealthy); }
-
+ 
   button.refresh{
     font-family:'IBM Plex Mono', monospace; font-size:12px; font-weight:600;
     background:transparent; border:1px solid var(--card-line); color:var(--paper);
@@ -84,7 +163,7 @@
   }
   button.refresh:hover{ border-color:var(--marigold); color:var(--marigold); }
   button.refresh:focus-visible{ outline:2px solid var(--marigold); outline-offset:2px; }
-
+ 
   /* --- Skyline hero --- */
   .skyline-box{
     position:relative; margin-top:24px; border-radius:14px; overflow:hidden;
@@ -112,7 +191,7 @@
     position:absolute; right:24px; bottom:20px; z-index:2; text-align:right;
     font-size:12px; color:var(--muted); max-width:220px;
   }
-
+ 
   /* --- Stat row --- */
   .stats{
     display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-top:20px;
@@ -124,7 +203,7 @@
   .stat .k{ font-size:11px; text-transform:uppercase; letter-spacing:0.08em; color:var(--muted); }
   .stat .v{ font-family:'Space Grotesk', sans-serif; font-size:24px; font-weight:600; margin-top:6px; color:var(--paper); }
   .stat .v small{ font-size:13px; color:var(--muted); font-family:'IBM Plex Mono'; }
-
+ 
   /* --- Table --- */
   section.table-section{ margin-top:32px; }
   .table-head{
@@ -134,11 +213,11 @@
     font-family:'Space Grotesk', sans-serif; font-size:18px; margin:0; font-weight:600;
   }
   .hint{ font-size:11px; color:var(--muted); }
-
+ 
   .table-scroll{
     border:1px solid var(--card-line); border-radius:10px; overflow:hidden; overflow-x:auto;
   }
-  table{ width:100%; border-collapse:collapse; font-size:13px; min-width:720px; }
+  table{ width:100%; border-collapse:collapse; font-size:13px; min-width:1080px; }
   thead th{
     text-align:left; padding:10px 14px; background:var(--sky-mid); color:var(--muted);
     text-transform:uppercase; font-size:10.5px; letter-spacing:0.06em; font-weight:600;
@@ -157,21 +236,21 @@
   }
   .name-cell{ color:var(--paper); font-weight:500; }
   .muted-cell{ color:var(--muted); }
-
+ 
   footer{
     max-width:1080px; margin:40px auto 0; padding:0 24px; color:var(--muted); font-size:11.5px;
     line-height:1.7; border-top:1px solid var(--card-line); padding-top:20px;
   }
-
+ 
   .msg-banner{
     margin-top:20px; padding:14px 16px; border-radius:8px; font-size:13px;
     background:rgba(193,68,58,0.12); border:1px solid rgba(193,68,58,0.4); color:#f3b3ac;
     display:none;
   }
   .msg-banner.show{ display:block; }
-
+ 
   .skeleton{ color:var(--muted); font-size:12px; padding:20px 14px; }
-
+ 
   /* --- Map section --- */
   section.map-section{ margin-top:32px; }
   .map-head{
@@ -196,7 +275,7 @@
   }
   .legend .item{ display:flex; align-items:center; gap:6px; }
   .legend .swatch{ width:10px; height:10px; border-radius:50%; display:inline-block; }
-
+ 
   .leaflet-popup-content-wrapper{
     background:var(--card); color:var(--paper); border:1px solid var(--card-line);
     font-family:'IBM Plex Mono', monospace; font-size:12.5px;
@@ -208,7 +287,7 @@
 </head>
 <body>
 <div class="wrap">
-
+ 
   <header class="top">
     <div>
       <p class="brand-eyebrow">PurpleAir · Real-time · Nepal</p>
@@ -222,9 +301,9 @@
       </div>
     </div>
   </header>
-
+ 
   <div class="msg-banner" id="errorBanner"></div>
-
+ 
   <div class="skyline-box">
     <svg viewBox="0 0 1080 300" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
       <defs>
@@ -254,7 +333,7 @@
     </div>
     <div class="hero-caption">Haze over the range thickens with the national average reading</div>
   </div>
-
+ 
   <div class="stats">
     <div class="stat">
       <div class="k">Sensors reporting</div>
@@ -273,7 +352,7 @@
       <div class="v" id="statUpdated" style="font-size:16px;">--</div>
     </div>
   </div>
-
+ 
   <section class="map-section">
     <div class="map-head">
       <h2>Sensor map</h2>
@@ -292,7 +371,7 @@
     <div id="map"></div>
     <div class="legend" id="mapLegend"></div>
   </section>
-
+ 
   <section class="table-section">
     <div class="table-head">
       <h2>All sensors</h2>
@@ -305,32 +384,36 @@
             <th>Station</th>
             <th>PM2.5</th>
             <th>10-min avg</th>
+            <th>AQI RT (corr.)</th>
+            <th>AQI RT (raw)</th>
+            <th>AQI 10m (corr.)</th>
+            <th>AQI 10m (raw)</th>
             <th>Temp</th>
             <th>Humidity</th>
             <th>Last seen</th>
           </tr>
         </thead>
         <tbody id="tableBody">
-          <tr><td colspan="6" class="skeleton">Fetching live data from PurpleAir…</td></tr>
+          <tr><td colspan="10" class="skeleton">Fetching live data from PurpleAir…</td></tr>
         </tbody>
       </table>
     </div>
   </section>
-
+ 
   <footer>
     Data source: <a href="https://map.purpleair.com" target="_blank" rel="noopener">PurpleAir</a> public sensor network, queried live via the PurpleAir API for sensors inside Nepal's bounding box. PM2.5 is reported as an instantaneous reading (not a 24-hour average), and readings are crowd-sourced from individual sensors — treat them as indicative rather than regulatory-grade. Auto-refreshes every 2 minutes.
   </footer>
 </div>
-
+ 
 <script>
   // ---- Config ---------------------------------------------------------
   // No API key here — the browser calls our own /api/sensors endpoint,
   // which is backed by a Netlify Function that holds the real key server-side.
   const SENSORS_ENDPOINT = "/api/sensors";
   const REFRESH_MS = 2 * 60 * 1000;
-
+ 
   const el = id => document.getElementById(id);
-
+ 
   function aqiCategory(pm){
     if (pm == null || isNaN(pm)) return { label:"no data", color:"var(--muted)" };
     if (pm <= 12.0)   return { label:"Good", color:"var(--aqi-good)" };
@@ -340,7 +423,7 @@
     if (pm <= 250.4)  return { label:"Very unhealthy", color:"var(--aqi-very)" };
     return { label:"Hazardous", color:"var(--aqi-hazardous)" };
   }
-
+ 
   // ---- Approximate a 10-minute-smoothed CF=1 reading --------------------
   // The EPA correction formula is defined for the CF=1 reading, but
   // PurpleAir's API only exposes a 10-minute average for the ATM-corrected
@@ -358,7 +441,7 @@
     const clampedRatio = Math.max(0.5, Math.min(1.5, ratio));
     return cf1Instant * clampedRatio;
   }
-
+ 
   // ---- US EPA correction for PurpleAir sensors --------------------------
   // PurpleAir's own "US EPA PM2.5 AQI" layer doesn't feed raw PM2.5 straight
   // into the AQI formula — it first applies EPA's published correction,
@@ -376,7 +459,7 @@
     }
     return Math.max(0, corrected);
   }
-
+ 
   // ---- US EPA AQI conversion from PM2.5 (µg/m3) ------------------------
   // Standard EPA breakpoint table (2012 revision), instantaneous approximation.
   const AQI_BREAKPOINTS = [
@@ -388,7 +471,7 @@
     { cLow: 250.5, cHigh: 350.4, iLow: 301, iHigh: 400 },
     { cLow: 350.5, cHigh: 500.4, iLow: 401, iHigh: 500 },
   ];
-
+ 
   function pm25ToAqi(pm){
     if (pm == null || isNaN(pm)) return null;
     const clamped = Math.max(0, Math.min(500.4, pm));
@@ -397,7 +480,7 @@
     const aqi = ((bp.iHigh - bp.iLow) / (bp.cHigh - bp.cLow)) * (clamped - bp.cLow) + bp.iLow;
     return Math.round(aqi);
   }
-
+ 
   function aqiValueColor(aqi){
     if (aqi == null || isNaN(aqi)) return "#6b7c96";
     if (aqi <= 50)  return "#4caf50";
@@ -407,7 +490,7 @@
     if (aqi <= 300) return "#9a4fb0";
     return "#7e2030";
   }
-
+ 
   // ---- Parameter definitions for the map's "color by" control ---------
   const PARAM_DEFS = {
     "aqi_now": {
@@ -497,7 +580,7 @@
       ],
     },
   };
-
+ 
   function aqiColorRaw(pm){
     if (pm == null || isNaN(pm)) return "#6b7c96";
     if (pm <= 12.0)   return "#4caf50";
@@ -508,7 +591,7 @@
     return "#7e2030";
   }
   function aqiColor(pm){ return aqiColorRaw(pm); }
-
+ 
   function gradientColor(v, min, max, colorMin, colorMax){
     if (v == null || isNaN(v)) return "#6b7c96";
     const t = Math.max(0, Math.min(1, (v - min) / (max - min)));
@@ -522,12 +605,12 @@
     const n = parseInt(hex.replace("#",""), 16);
     return { r:(n>>16)&255, g:(n>>8)&255, b:n&255 };
   }
-
+ 
   // ---- Map setup --------------------------------------------------------
   let map = null;
   let markerLayer = null;
   let latestSensors = [];
-
+ 
   function initMap(){
     if (typeof L === "undefined") {
       console.error("Leaflet failed to load — map will stay blank, but the rest of the dashboard still works.");
@@ -541,7 +624,7 @@
       maxZoom: 12,
     }).addTo(map);
     markerLayer = L.layerGroup().addTo(map);
-
+ 
     // Leaflet sizes itself based on the container at init time; if fonts or
     // layout above the map shift afterward, tiles can render patchily.
     // Force a couple of resize checks after the page settles.
@@ -549,12 +632,12 @@
     setTimeout(() => map.invalidateSize(), 800);
     window.addEventListener("resize", () => map.invalidateSize());
   }
-
+ 
   function renderMap(sensors, paramKey){
     if (!map) return;
     const def = PARAM_DEFS[paramKey];
     markerLayer.clearLayers();
-
+ 
     sensors.forEach(s => {
       const lat = Number(s.latitude), lon = Number(s.longitude);
       if (isNaN(lat) || isNaN(lon)) return;
@@ -588,19 +671,19 @@
       );
       markerLayer.addLayer(marker);
     });
-
+ 
     // Legend
     const legendEl = el("mapLegend");
     legendEl.innerHTML = def.legend.map(([label,color]) =>
       `<span class="item"><span class="swatch" style="background:${color}"></span>${label}</span>`
     ).join("");
   }
-
+ 
   function fmtTime(d){
     if (!d) return "—";
     return d.toLocaleString(undefined, { month:"short", day:"numeric", hour:"2-digit", minute:"2-digit" });
   }
-
+ 
   function timeAgo(d){
     if (!d) return "—";
     const s = Math.round((Date.now() - d.getTime())/1000);
@@ -610,7 +693,7 @@
     const h = Math.round(m/60);
     return h + "h ago";
   }
-
+ 
   function showError(msg){
     const banner = el("errorBanner");
     banner.textContent = msg;
@@ -619,7 +702,7 @@
   function clearError(){
     el("errorBanner").classList.remove("show");
   }
-
+ 
   async function fetchSensors(){
     const res = await fetch(SENSORS_ENDPOINT);
     if (!res.ok){
@@ -634,16 +717,16 @@
       return o;
     });
   }
-
+ 
   function render(sensors){
     latestSensors = sensors;
     renderMap(sensors, el("paramSelect").value);
     if (map) setTimeout(() => map.invalidateSize(), 100);
-
+ 
     const withPm = sensors.filter(s => s["pm2.5"] != null && !isNaN(s["pm2.5"]));
     const count = sensors.length;
     const avg = withPm.length ? withPm.reduce((a,s)=>a+Number(s["pm2.5"]),0) / withPm.length : null;
-
+ 
     // Hero
     el("heroValue").textContent = avg != null ? avg.toFixed(1) : "--";
     const cat = aqiCategory(avg);
@@ -654,7 +737,7 @@
     // haze intensity: 0 at pm=0, ~1 at pm=150+
     const hazeOpacity = avg != null ? Math.min(avg / 150, 1) : 0;
     el("hazeLayer").style.opacity = hazeOpacity;
-
+ 
     // Stats
     el("statCount").textContent = count;
     if (withPm.length){
@@ -668,25 +751,25 @@
     }
     const now = new Date();
     el("statUpdated").textContent = fmtTime(now);
-
+ 
     // Status line
     const statusLine = el("statusLine");
     statusLine.classList.remove("stale");
     statusLine.innerHTML = `<span class="dot"></span>live — updated ${fmtTime(now)}`;
-
+ 
     // Table
     const rows = [...sensors].sort((a,b) => {
       const av = a["pm2.5"] == null ? -1 : Number(a["pm2.5"]);
       const bv = b["pm2.5"] == null ? -1 : Number(b["pm2.5"]);
       return bv - av;
     });
-
+ 
     const body = el("tableBody");
     if (!rows.length){
-      body.innerHTML = `<tr><td colspan="6" class="skeleton">No sensors returned for this bounding box right now.</td></tr>`;
+      body.innerHTML = `<tr><td colspan="10" class="skeleton">No sensors returned for this bounding box right now.</td></tr>`;
       return;
     }
-
+ 
     body.innerHTML = rows.map(s => {
       const pm = s["pm2.5"] != null ? Number(s["pm2.5"]) : null;
       const c = aqiCategory(pm);
@@ -694,6 +777,21 @@
       const temp = s.temperature != null ? Math.round((Number(s.temperature)-32)*5/9) + "°C" : "—";
       const hum = s.humidity != null ? Number(s.humidity).toFixed(0) + "%" : "—";
       const lastSeen = s.last_seen ? new Date(Number(s.last_seen)*1000) : null;
+ 
+      const cf1Instant = s["pm2.5_cf_1"] != null ? Number(s["pm2.5_cf_1"]) : null;
+      const atmInstant = s["pm2.5"] != null ? Number(s["pm2.5"]) : null;
+      const atm10min = s["pm2.5_10minute"] != null ? Number(s["pm2.5_10minute"]) : null;
+      const rh = s.humidity != null ? Number(s.humidity) : null;
+ 
+      const aqiRtCorr = pm25ToAqi(epaCorrectedPM25(cf1Instant, rh));
+      const aqiRtRaw = pm25ToAqi(atmInstant);
+      const aqi10mCorr = pm25ToAqi(epaCorrectedPM25(smoothedCf1(cf1Instant, atmInstant, atm10min), rh));
+      const aqi10mRaw = pm25ToAqi(atm10min);
+ 
+      const aqiCell = v => v != null
+        ? `<span class="pm-badge"><span class="swatch" style="background:${aqiValueColor(v)}"></span>${v}</span>`
+        : "—";
+ 
       return `
         <tr>
           <td class="name-cell">${(s.name || "unnamed").toString().replace(/[<>]/g,"")}</td>
@@ -704,15 +802,19 @@
             </span>
           </td>
           <td class="muted-cell">${pm10}</td>
+          <td class="muted-cell">${aqiCell(aqiRtCorr)}</td>
+          <td class="muted-cell">${aqiCell(aqiRtRaw)}</td>
+          <td class="muted-cell">${aqiCell(aqi10mCorr)}</td>
+          <td class="muted-cell">${aqiCell(aqi10mRaw)}</td>
           <td class="muted-cell">${temp}</td>
           <td class="muted-cell">${hum}</td>
           <td class="muted-cell">${lastSeen ? timeAgo(lastSeen) : "—"}</td>
         </tr>`;
     }).join("");
   }
-
+ 
   let refreshTimer = null;
-
+ 
   async function load(){
     el("refreshBtn").textContent = "↻ Refreshing…";
     try{
@@ -732,20 +834,21 @@
       el("refreshBtn").textContent = "↻ Refresh now";
     }
   }
-
+ 
   el("refreshBtn").addEventListener("click", () => {
     if (refreshTimer) clearInterval(refreshTimer);
     load();
     refreshTimer = setInterval(load, REFRESH_MS);
   });
-
+ 
   el("paramSelect").addEventListener("change", () => {
     if (latestSensors.length) renderMap(latestSensors, el("paramSelect").value);
   });
-
+ 
   initMap();
   load();
   refreshTimer = setInterval(load, REFRESH_MS);
 </script>
 </body>
 </html>
+ 
