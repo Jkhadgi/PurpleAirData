@@ -1,0 +1,623 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Nepal Air Watch — Live PurpleAir Monitoring</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" integrity="sha512-puBpdR0798OZvTTbP4A8Ix/l+A4dHDD0DGqYW6RQ+9jxkRFclaxxQb/SJAWZfWAkuyeQUytO7+7N4QKrDh+drA==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js" integrity="sha512-BB3hKbKWOc9Ez/TAwyWxNXeoV9c1v6FIeYiBieIWkpLjauysF18NzgR1MBNBXf8/KABdlkX68nAhlwcDFLGPCQ==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script>
+  // Fallback in case cdnjs is unreachable: try jsDelivr instead.
+  if (typeof L === "undefined") {
+    document.write('<script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.min.js"><\/script>');
+  }
+</script>
+<style>
+  :root{
+    --sky-deep:   #0e1a2b;
+    --sky-mid:    #16283f;
+    --card:       #182742;
+    --card-line:  #2a3c5c;
+    --marigold:   #f2a93b;
+    --marigold-dim:#c98a2e;
+    --prayer-blue:#5b9bd1;
+    --prayer-red: #c1443a;
+    --paper:      #f2ede1;
+    --muted:      #9fb0c8;
+
+    --aqi-good:     #4caf50;
+    --aqi-moderate: #e8c73a;
+    --aqi-sensitive:#f2a93b;
+    --aqi-unhealthy:#e0553f;
+    --aqi-very:     #9a4fb0;
+    --aqi-hazardous:#7e2030;
+  }
+
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; padding:0; }
+  body{
+    background:
+      radial-gradient(ellipse 900px 500px at 50% -10%, rgba(242,169,59,0.10), transparent 60%),
+      linear-gradient(180deg, var(--sky-deep), #0a1420 90%);
+    color:var(--paper);
+    font-family:'IBM Plex Mono', monospace;
+    min-height:100vh;
+    padding:0 0 64px;
+  }
+
+  a{ color:var(--marigold); }
+
+  .wrap{ max-width:1080px; margin:0 auto; padding:0 24px; }
+
+  header.top{
+    display:flex; align-items:flex-start; justify-content:space-between;
+    gap:16px; padding:36px 0 8px; flex-wrap:wrap;
+  }
+  .brand-eyebrow{
+    text-transform:uppercase; letter-spacing:0.18em; font-size:11px;
+    color:var(--prayer-blue); margin:0 0 8px;
+  }
+  h1{
+    font-family:'Space Grotesk', sans-serif; font-weight:700;
+    font-size:clamp(28px,4vw,42px); margin:0; color:var(--paper);
+    letter-spacing:-0.01em;
+  }
+  .sub{ color:var(--muted); font-size:13px; margin-top:8px; max-width:520px; line-height:1.5; }
+
+  .status{
+    text-align:right; font-size:12px; color:var(--muted);
+  }
+  .status .dot{
+    display:inline-block; width:8px; height:8px; border-radius:50%;
+    background:var(--aqi-good); margin-right:6px; box-shadow:0 0 8px var(--aqi-good);
+  }
+  .status.stale .dot{ background:var(--aqi-unhealthy); box-shadow:0 0 8px var(--aqi-unhealthy); }
+
+  button.refresh{
+    font-family:'IBM Plex Mono', monospace; font-size:12px; font-weight:600;
+    background:transparent; border:1px solid var(--card-line); color:var(--paper);
+    padding:8px 14px; border-radius:6px; cursor:pointer; margin-top:8px;
+    transition:border-color .15s, color .15s;
+  }
+  button.refresh:hover{ border-color:var(--marigold); color:var(--marigold); }
+  button.refresh:focus-visible{ outline:2px solid var(--marigold); outline-offset:2px; }
+
+  /* --- Skyline hero --- */
+  .skyline-box{
+    position:relative; margin-top:24px; border-radius:14px; overflow:hidden;
+    border:1px solid var(--card-line);
+    background:linear-gradient(180deg, #0c1d34 0%, #0a1626 100%);
+  }
+  .skyline-box svg{ display:block; width:100%; height:auto; }
+  .haze{
+    position:absolute; inset:0; background:linear-gradient(180deg, rgba(210,150,90,0) 0%, rgba(210,150,90,0.55) 100%);
+    opacity:0; transition:opacity 1.2s ease; pointer-events:none;
+  }
+  .hero-readout{
+    position:absolute; left:24px; bottom:20px; z-index:2;
+  }
+  .hero-readout .big{
+    font-family:'Space Grotesk', sans-serif; font-weight:700; font-size:clamp(40px,7vw,64px);
+    line-height:1; color:var(--paper); text-shadow:0 2px 20px rgba(0,0,0,0.5);
+  }
+  .hero-readout .unit{ font-size:16px; color:var(--muted); font-weight:500; }
+  .hero-readout .label{
+    display:inline-block; margin-top:10px; font-size:12px; font-weight:600;
+    letter-spacing:0.06em; text-transform:uppercase; padding:4px 10px; border-radius:20px;
+  }
+  .hero-caption{
+    position:absolute; right:24px; bottom:20px; z-index:2; text-align:right;
+    font-size:12px; color:var(--muted); max-width:220px;
+  }
+
+  /* --- Stat row --- */
+  .stats{
+    display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-top:20px;
+  }
+  @media (max-width:720px){ .stats{ grid-template-columns:repeat(2,1fr); } }
+  .stat{
+    background:var(--card); border:1px solid var(--card-line); border-radius:10px; padding:16px 18px;
+  }
+  .stat .k{ font-size:11px; text-transform:uppercase; letter-spacing:0.08em; color:var(--muted); }
+  .stat .v{ font-family:'Space Grotesk', sans-serif; font-size:24px; font-weight:600; margin-top:6px; color:var(--paper); }
+  .stat .v small{ font-size:13px; color:var(--muted); font-family:'IBM Plex Mono'; }
+
+  /* --- Table --- */
+  section.table-section{ margin-top:32px; }
+  .table-head{
+    display:flex; align-items:baseline; justify-content:space-between; margin-bottom:12px;
+  }
+  h2{
+    font-family:'Space Grotesk', sans-serif; font-size:18px; margin:0; font-weight:600;
+  }
+  .hint{ font-size:11px; color:var(--muted); }
+
+  .table-scroll{
+    border:1px solid var(--card-line); border-radius:10px; overflow:hidden; overflow-x:auto;
+  }
+  table{ width:100%; border-collapse:collapse; font-size:13px; min-width:720px; }
+  thead th{
+    text-align:left; padding:10px 14px; background:var(--sky-mid); color:var(--muted);
+    text-transform:uppercase; font-size:10.5px; letter-spacing:0.06em; font-weight:600;
+    border-bottom:1px solid var(--card-line); position:sticky; top:0;
+  }
+  tbody td{
+    padding:10px 14px; border-bottom:1px solid rgba(42,60,92,0.5); color:var(--paper);
+  }
+  tbody tr:last-child td{ border-bottom:none; }
+  tbody tr:hover{ background:rgba(242,169,59,0.05); }
+  .pm-badge{
+    display:inline-flex; align-items:center; gap:6px; font-weight:600;
+  }
+  .pm-badge .swatch{
+    width:9px; height:9px; border-radius:50%; display:inline-block;
+  }
+  .name-cell{ color:var(--paper); font-weight:500; }
+  .muted-cell{ color:var(--muted); }
+
+  footer{
+    max-width:1080px; margin:40px auto 0; padding:0 24px; color:var(--muted); font-size:11.5px;
+    line-height:1.7; border-top:1px solid var(--card-line); padding-top:20px;
+  }
+
+  .msg-banner{
+    margin-top:20px; padding:14px 16px; border-radius:8px; font-size:13px;
+    background:rgba(193,68,58,0.12); border:1px solid rgba(193,68,58,0.4); color:#f3b3ac;
+    display:none;
+  }
+  .msg-banner.show{ display:block; }
+
+  .skeleton{ color:var(--muted); font-size:12px; padding:20px 14px; }
+
+  /* --- Map section --- */
+  section.map-section{ margin-top:32px; }
+  .map-head{
+    display:flex; align-items:center; justify-content:space-between; gap:12px;
+    margin-bottom:12px; flex-wrap:wrap;
+  }
+  .param-select{
+    display:flex; align-items:center; gap:8px; font-size:12px; color:var(--muted);
+  }
+  select#paramSelect{
+    font-family:'IBM Plex Mono', monospace; font-size:12.5px; font-weight:600;
+    background:var(--card); color:var(--paper); border:1px solid var(--card-line);
+    border-radius:6px; padding:7px 10px; cursor:pointer;
+  }
+  select#paramSelect:focus-visible{ outline:2px solid var(--marigold); outline-offset:2px; }
+  #map{
+    height:420px; width:100%; border-radius:10px; border:1px solid var(--card-line);
+    background:var(--sky-mid);
+  }
+  .legend{
+    display:flex; flex-wrap:wrap; gap:14px; margin-top:10px; font-size:11px; color:var(--muted);
+  }
+  .legend .item{ display:flex; align-items:center; gap:6px; }
+  .legend .swatch{ width:10px; height:10px; border-radius:50%; display:inline-block; }
+
+  .leaflet-popup-content-wrapper{
+    background:var(--card); color:var(--paper); border:1px solid var(--card-line);
+    font-family:'IBM Plex Mono', monospace; font-size:12.5px;
+  }
+  .leaflet-popup-tip{ background:var(--card); }
+  .popup-name{ font-family:'Space Grotesk', sans-serif; font-weight:600; margin-bottom:4px; }
+  .leaflet-container a.leaflet-popup-close-button{ color:var(--muted); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="top">
+    <div>
+      <p class="brand-eyebrow">PurpleAir · Real-time · Nepal</p>
+      <h1>Nepal Air Watch</h1>
+      <p class="sub">Live particulate readings pulled straight from PurpleAir sensors across Nepal — no need to open the PurpleAir map.</p>
+    </div>
+    <div>
+      <div class="status" id="statusLine"><span class="dot"></span>connecting…</div>
+      <div style="text-align:right;">
+        <button class="refresh" id="refreshBtn">↻ Refresh now</button>
+      </div>
+    </div>
+  </header>
+
+  <div class="msg-banner" id="errorBanner"></div>
+
+  <div class="skyline-box">
+    <svg viewBox="0 0 1080 300" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <linearGradient id="skyGrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#0d2035"/>
+          <stop offset="100%" stop-color="#0a1626"/>
+        </linearGradient>
+      </defs>
+      <rect width="1080" height="300" fill="url(#skyGrad)"/>
+      <!-- far range -->
+      <polygon points="0,220 80,150 160,200 240,120 320,190 420,140 500,210 600,130 700,195 800,150 900,210 980,160 1080,205 1080,300 0,300"
+        fill="#16283f" opacity="0.7"/>
+      <!-- mid range -->
+      <polygon points="0,260 100,190 190,240 280,160 380,230 480,175 560,235 660,170 760,225 860,180 960,235 1080,190 1080,300 0,300"
+        fill="#122036" opacity="0.9"/>
+      <!-- near / snow caps -->
+      <polygon points="0,300 90,230 130,255 200,190 250,220 340,165 380,205 470,175 520,215 610,180 660,210 750,195 800,230 900,200 950,225 1080,215 1080,300"
+        fill="#0c1826"/>
+      <polygon points="200,190 220,205 250,220 230,207" fill="#dfe6ee" opacity="0.85"/>
+      <polygon points="340,165 362,182 380,205 355,188" fill="#dfe6ee" opacity="0.85"/>
+      <polygon points="470,175 492,193 520,215 498,197" fill="#dfe6ee" opacity="0.85"/>
+    </svg>
+    <div class="haze" id="hazeLayer"></div>
+    <div class="hero-readout">
+      <span class="big" id="heroValue">--</span><span class="unit"> µg/m³ avg PM2.5</span>
+      <div><span class="label" id="heroLabel">loading</span></div>
+    </div>
+    <div class="hero-caption">Haze over the range thickens with the national average reading</div>
+  </div>
+
+  <div class="stats">
+    <div class="stat">
+      <div class="k">Sensors reporting</div>
+      <div class="v" id="statCount">--</div>
+    </div>
+    <div class="stat">
+      <div class="k">Cleanest reading</div>
+      <div class="v" id="statBest">-- <small>µg/m³</small></div>
+    </div>
+    <div class="stat">
+      <div class="k">Highest reading</div>
+      <div class="v" id="statWorst">-- <small>µg/m³</small></div>
+    </div>
+    <div class="stat">
+      <div class="k">Last updated</div>
+      <div class="v" id="statUpdated" style="font-size:16px;">--</div>
+    </div>
+  </div>
+
+  <section class="map-section">
+    <div class="map-head">
+      <h2>Sensor map</h2>
+      <div class="param-select">
+        <label for="paramSelect">Color by</label>
+        <select id="paramSelect">
+          <option value="pm2.5">PM2.5 (now)</option>
+          <option value="pm2.5_10minute">PM2.5 (10-min avg)</option>
+          <option value="temperature">Temperature</option>
+          <option value="humidity">Humidity</option>
+        </select>
+      </div>
+    </div>
+    <div id="map"></div>
+    <div class="legend" id="mapLegend"></div>
+  </section>
+
+  <section class="table-section">
+    <div class="table-head">
+      <h2>All sensors</h2>
+      <span class="hint" id="sortHint">sorted by PM2.5, highest first</span>
+    </div>
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>Station</th>
+            <th>PM2.5</th>
+            <th>10-min avg</th>
+            <th>Temp</th>
+            <th>Humidity</th>
+            <th>Last seen</th>
+          </tr>
+        </thead>
+        <tbody id="tableBody">
+          <tr><td colspan="6" class="skeleton">Fetching live data from PurpleAir…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <footer>
+    Data source: <a href="https://map.purpleair.com" target="_blank" rel="noopener">PurpleAir</a> public sensor network, queried live via the PurpleAir API for sensors inside Nepal's bounding box. PM2.5 is reported as an instantaneous reading (not a 24-hour average), and readings are crowd-sourced from individual sensors — treat them as indicative rather than regulatory-grade. Auto-refreshes every 2 minutes.
+  </footer>
+</div>
+
+<script>
+  // ---- Config ---------------------------------------------------------
+  // No API key here — the browser calls our own /api/sensors endpoint,
+  // which is backed by a Netlify Function that holds the real key server-side.
+  const SENSORS_ENDPOINT = "/api/sensors";
+  const REFRESH_MS = 2 * 60 * 1000;
+
+  const el = id => document.getElementById(id);
+
+  function aqiCategory(pm){
+    if (pm == null || isNaN(pm)) return { label:"no data", color:"var(--muted)" };
+    if (pm <= 12.0)   return { label:"Good", color:"var(--aqi-good)" };
+    if (pm <= 35.4)   return { label:"Moderate", color:"var(--aqi-moderate)" };
+    if (pm <= 55.4)   return { label:"Unhealthy (sensitive)", color:"var(--aqi-sensitive)" };
+    if (pm <= 150.4)  return { label:"Unhealthy", color:"var(--aqi-unhealthy)" };
+    if (pm <= 250.4)  return { label:"Very unhealthy", color:"var(--aqi-very)" };
+    return { label:"Hazardous", color:"var(--aqi-hazardous)" };
+  }
+
+  // ---- Parameter definitions for the map's "color by" control ---------
+  const PARAM_DEFS = {
+    "pm2.5": {
+      label: "PM2.5 (µg/m³)",
+      unit: "µg/m³",
+      getValue: s => s["pm2.5"] != null ? Number(s["pm2.5"]) : null,
+      colorFor: aqiColor,
+      legend: [
+        ["Good (0–12)", "var(--aqi-good)"],
+        ["Moderate (12–35)", "var(--aqi-moderate)"],
+        ["Sensitive (35–55)", "var(--aqi-sensitive)"],
+        ["Unhealthy (55–150)", "var(--aqi-unhealthy)"],
+        ["Very unhealthy (150–250)", "var(--aqi-very)"],
+        ["Hazardous (250+)", "var(--aqi-hazardous)"],
+      ],
+    },
+    "pm2.5_10minute": {
+      label: "PM2.5, 10-min avg (µg/m³)",
+      unit: "µg/m³",
+      getValue: s => s["pm2.5_10minute"] != null ? Number(s["pm2.5_10minute"]) : null,
+      colorFor: aqiColor,
+      legend: [
+        ["Good (0–12)", "var(--aqi-good)"],
+        ["Moderate (12–35)", "var(--aqi-moderate)"],
+        ["Sensitive (35–55)", "var(--aqi-sensitive)"],
+        ["Unhealthy (55–150)", "var(--aqi-unhealthy)"],
+        ["Very unhealthy (150–250)", "var(--aqi-very)"],
+        ["Hazardous (250+)", "var(--aqi-hazardous)"],
+      ],
+    },
+    "temperature": {
+      label: "Temperature (°C)",
+      unit: "°C",
+      getValue: s => s.temperature != null ? (Number(s.temperature)-32)*5/9 : null,
+      colorFor: v => gradientColor(v, 0, 40, "#5b9bd1", "#e0553f"),
+      legend: [
+        ["Cooler", "#5b9bd1"],
+        ["Warmer", "#e0553f"],
+      ],
+    },
+    "humidity": {
+      label: "Humidity (%)",
+      unit: "%",
+      getValue: s => s.humidity != null ? Number(s.humidity) : null,
+      colorFor: v => gradientColor(v, 0, 100, "#c98a2e", "#5b9bd1"),
+      legend: [
+        ["Drier", "#c98a2e"],
+        ["More humid", "#5b9bd1"],
+      ],
+    },
+  };
+
+  function aqiColorRaw(pm){
+    if (pm == null || isNaN(pm)) return "#6b7c96";
+    if (pm <= 12.0)   return "#4caf50";
+    if (pm <= 35.4)   return "#e8c73a";
+    if (pm <= 55.4)   return "#f2a93b";
+    if (pm <= 150.4)  return "#e0553f";
+    if (pm <= 250.4)  return "#9a4fb0";
+    return "#7e2030";
+  }
+  function aqiColor(pm){ return aqiColorRaw(pm); }
+
+  function gradientColor(v, min, max, colorMin, colorMax){
+    if (v == null || isNaN(v)) return "#6b7c96";
+    const t = Math.max(0, Math.min(1, (v - min) / (max - min)));
+    const c1 = hexToRgb(colorMin), c2 = hexToRgb(colorMax);
+    const r = Math.round(c1.r + (c2.r - c1.r) * t);
+    const g = Math.round(c1.g + (c2.g - c1.g) * t);
+    const b = Math.round(c1.b + (c2.b - c1.b) * t);
+    return `rgb(${r},${g},${b})`;
+  }
+  function hexToRgb(hex){
+    const n = parseInt(hex.replace("#",""), 16);
+    return { r:(n>>16)&255, g:(n>>8)&255, b:n&255 };
+  }
+
+  // ---- Map setup --------------------------------------------------------
+  let map = null;
+  let markerLayer = null;
+  let latestSensors = [];
+
+  function initMap(){
+    if (typeof L === "undefined") {
+      console.error("Leaflet failed to load — map will stay blank, but the rest of the dashboard still works.");
+      const mapEl = el("map");
+      if (mapEl) mapEl.innerHTML = '<div class="skeleton" style="padding:16px;">Map library failed to load. Data below still works.</div>';
+      return;
+    }
+    map = L.map("map", { scrollWheelZoom:false }).setView([28.3949, 84.1240], 7);
+    L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
+      attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
+      maxZoom: 12,
+    }).addTo(map);
+    markerLayer = L.layerGroup().addTo(map);
+  }
+
+  function renderMap(sensors, paramKey){
+    if (!map) return;
+    const def = PARAM_DEFS[paramKey];
+    markerLayer.clearLayers();
+
+    sensors.forEach(s => {
+      const lat = Number(s.latitude), lon = Number(s.longitude);
+      if (isNaN(lat) || isNaN(lon)) return;
+      const value = def.getValue(s);
+      const color = def.colorFor(value);
+      const marker = L.circleMarker([lat, lon], {
+        radius: 8,
+        color: "#0a1626",
+        weight: 1.5,
+        fillColor: color,
+        fillOpacity: 0.9,
+      });
+      const valueStr = value != null ? value.toFixed(1) + " " + def.unit : "no data";
+      marker.bindPopup(
+        `<div class="popup-name">${(s.name || "unnamed").toString().replace(/[<>]/g,"")}</div>` +
+        `${def.label}: <strong>${valueStr}</strong><br/>` +
+        `PM2.5 now: ${s["pm2.5"] != null ? Number(s["pm2.5"]).toFixed(1) : "—"} µg/m³`
+      );
+      markerLayer.addLayer(marker);
+    });
+
+    // Legend
+    const legendEl = el("mapLegend");
+    legendEl.innerHTML = def.legend.map(([label,color]) =>
+      `<span class="item"><span class="swatch" style="background:${color}"></span>${label}</span>`
+    ).join("");
+  }
+
+  function fmtTime(d){
+    if (!d) return "—";
+    return d.toLocaleString(undefined, { month:"short", day:"numeric", hour:"2-digit", minute:"2-digit" });
+  }
+
+  function timeAgo(d){
+    if (!d) return "—";
+    const s = Math.round((Date.now() - d.getTime())/1000);
+    if (s < 90) return s + "s ago";
+    const m = Math.round(s/60);
+    if (m < 90) return m + "m ago";
+    const h = Math.round(m/60);
+    return h + "h ago";
+  }
+
+  function showError(msg){
+    const banner = el("errorBanner");
+    banner.textContent = msg;
+    banner.classList.add("show");
+  }
+  function clearError(){
+    el("errorBanner").classList.remove("show");
+  }
+
+  async function fetchSensors(){
+    const res = await fetch(SENSORS_ENDPOINT);
+    if (!res.ok){
+      const body = await res.text().catch(()=> "");
+      throw new Error(`Proxy error ${res.status}: ${body.slice(0,200)}`);
+    }
+    const data = await res.json();
+    const fields = data.fields;
+    return data.data.map(row => {
+      const o = {};
+      fields.forEach((f,i) => o[f] = row[i]);
+      return o;
+    });
+  }
+
+  function render(sensors){
+    latestSensors = sensors;
+    renderMap(sensors, el("paramSelect").value);
+
+    const withPm = sensors.filter(s => s["pm2.5"] != null && !isNaN(s["pm2.5"]));
+    const count = sensors.length;
+    const avg = withPm.length ? withPm.reduce((a,s)=>a+Number(s["pm2.5"]),0) / withPm.length : null;
+
+    // Hero
+    el("heroValue").textContent = avg != null ? avg.toFixed(1) : "--";
+    const cat = aqiCategory(avg);
+    const heroLabel = el("heroLabel");
+    heroLabel.textContent = cat.label;
+    heroLabel.style.background = cat.color;
+    heroLabel.style.color = "#101010";
+    // haze intensity: 0 at pm=0, ~1 at pm=150+
+    const hazeOpacity = avg != null ? Math.min(avg / 150, 1) : 0;
+    el("hazeLayer").style.opacity = hazeOpacity;
+
+    // Stats
+    el("statCount").textContent = count;
+    if (withPm.length){
+      const sorted = [...withPm].sort((a,b)=>a["pm2.5"]-b["pm2.5"]);
+      const best = sorted[0], worst = sorted[sorted.length-1];
+      el("statBest").innerHTML = `${Number(best["pm2.5"]).toFixed(1)} <small>${(best.name||"unnamed").slice(0,18)}</small>`;
+      el("statWorst").innerHTML = `${Number(worst["pm2.5"]).toFixed(1)} <small>${(worst.name||"unnamed").slice(0,18)}</small>`;
+    } else {
+      el("statBest").textContent = "--";
+      el("statWorst").textContent = "--";
+    }
+    const now = new Date();
+    el("statUpdated").textContent = fmtTime(now);
+
+    // Status line
+    const statusLine = el("statusLine");
+    statusLine.classList.remove("stale");
+    statusLine.innerHTML = `<span class="dot"></span>live — updated ${fmtTime(now)}`;
+
+    // Table
+    const rows = [...sensors].sort((a,b) => {
+      const av = a["pm2.5"] == null ? -1 : Number(a["pm2.5"]);
+      const bv = b["pm2.5"] == null ? -1 : Number(b["pm2.5"]);
+      return bv - av;
+    });
+
+    const body = el("tableBody");
+    if (!rows.length){
+      body.innerHTML = `<tr><td colspan="6" class="skeleton">No sensors returned for this bounding box right now.</td></tr>`;
+      return;
+    }
+
+    body.innerHTML = rows.map(s => {
+      const pm = s["pm2.5"] != null ? Number(s["pm2.5"]) : null;
+      const c = aqiCategory(pm);
+      const pm10 = s["pm2.5_10minute"] != null ? Number(s["pm2.5_10minute"]).toFixed(1) : "—";
+      const temp = s.temperature != null ? Math.round((Number(s.temperature)-32)*5/9) + "°C" : "—";
+      const hum = s.humidity != null ? Number(s.humidity).toFixed(0) + "%" : "—";
+      const lastSeen = s.last_seen ? new Date(Number(s.last_seen)*1000) : null;
+      return `
+        <tr>
+          <td class="name-cell">${(s.name || "unnamed").toString().replace(/[<>]/g,"")}</td>
+          <td>
+            <span class="pm-badge">
+              <span class="swatch" style="background:${c.color}"></span>
+              ${pm != null ? pm.toFixed(1) : "—"}
+            </span>
+          </td>
+          <td class="muted-cell">${pm10}</td>
+          <td class="muted-cell">${temp}</td>
+          <td class="muted-cell">${hum}</td>
+          <td class="muted-cell">${lastSeen ? timeAgo(lastSeen) : "—"}</td>
+        </tr>`;
+    }).join("");
+  }
+
+  let refreshTimer = null;
+
+  async function load(){
+    el("refreshBtn").textContent = "↻ Refreshing…";
+    try{
+      const sensors = await fetchSensors();
+      clearError();
+      render(sensors);
+    } catch(err){
+      console.error(err);
+      const statusLine = el("statusLine");
+      statusLine.classList.add("stale");
+      statusLine.innerHTML = `<span class="dot"></span>couldn't refresh`;
+      showError(
+        "Couldn't reach the data proxy just now — " + err.message +
+        ". If this keeps happening, check that PURPLEAIR_API_KEY is set under Site settings → Environment variables in Netlify, and that the function has redeployed since."
+      );
+    } finally {
+      el("refreshBtn").textContent = "↻ Refresh now";
+    }
+  }
+
+  el("refreshBtn").addEventListener("click", () => {
+    if (refreshTimer) clearInterval(refreshTimer);
+    load();
+    refreshTimer = setInterval(load, REFRESH_MS);
+  });
+
+  el("paramSelect").addEventListener("change", () => {
+    if (latestSensors.length) renderMap(latestSensors, el("paramSelect").value);
+  });
+
+  initMap();
+  load();
+  refreshTimer = setInterval(load, REFRESH_MS);
+</script>
+</body>
+</html>
