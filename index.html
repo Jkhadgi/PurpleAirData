@@ -280,7 +280,8 @@
       <div class="param-select">
         <label for="paramSelect">Color by</label>
         <select id="paramSelect">
-          <option value="aqi">AQI (US EPA)</option>
+          <option value="aqi_now">AQI (real-time)</option>
+          <option value="aqi_10min">AQI (10-min avg)</option>
           <option value="pm2.5">PM2.5 (now)</option>
           <option value="pm2.5_10minute">PM2.5 (10-min avg)</option>
           <option value="temperature">Temperature</option>
@@ -409,8 +410,25 @@
 
   // ---- Parameter definitions for the map's "color by" control ---------
   const PARAM_DEFS = {
-    "aqi": {
-      label: "AQI (US EPA, corrected)",
+    "aqi_now": {
+      label: "AQI (US EPA, real-time)",
+      unit: "AQI",
+      getValue: s => pm25ToAqi(epaCorrectedPM25(
+        s["pm2.5_cf_1"] != null ? Number(s["pm2.5_cf_1"]) : null,
+        s.humidity != null ? Number(s.humidity) : null
+      )),
+      colorFor: aqiValueColor,
+      legend: [
+        ["Good (0–50)", "#4caf50"],
+        ["Moderate (51–100)", "#e8c73a"],
+        ["Sensitive (101–150)", "#f2a93b"],
+        ["Unhealthy (151–200)", "#e0553f"],
+        ["Very unhealthy (201–300)", "#9a4fb0"],
+        ["Hazardous (301+)", "#7e2030"],
+      ],
+    },
+    "aqi_10min": {
+      label: "AQI (US EPA, 10-min avg)",
       unit: "AQI",
       getValue: s => pm25ToAqi(epaCorrectedPM25(
         smoothedCf1(
@@ -550,7 +568,11 @@
         fillOpacity: 0.9,
       });
       const valueStr = value != null ? value.toFixed(1) + " " + def.unit : "no data";
-      const aqiVal = pm25ToAqi(epaCorrectedPM25(
+      const aqiNow = pm25ToAqi(epaCorrectedPM25(
+        s["pm2.5_cf_1"] != null ? Number(s["pm2.5_cf_1"]) : null,
+        s.humidity != null ? Number(s.humidity) : null
+      ));
+      const aqi10min = pm25ToAqi(epaCorrectedPM25(
         smoothedCf1(
           s["pm2.5_cf_1"] != null ? Number(s["pm2.5_cf_1"]) : null,
           s["pm2.5"] != null ? Number(s["pm2.5"]) : null,
@@ -561,7 +583,7 @@
       marker.bindPopup(
         `<div class="popup-name">${(s.name || "unnamed").toString().replace(/[<>]/g,"")}</div>` +
         `${def.label}: <strong>${valueStr}</strong><br/>` +
-        `AQI: ${aqiVal != null ? aqiVal : "—"}<br/>` +
+        `AQI now: ${aqiNow != null ? aqiNow : "—"} · AQI 10-min: ${aqi10min != null ? aqi10min : "—"}<br/>` +
         `PM2.5 now: ${s["pm2.5"] != null ? Number(s["pm2.5"]).toFixed(1) : "—"} µg/m³`
       );
       markerLayer.addLayer(marker);
