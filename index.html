@@ -340,6 +340,24 @@
     return { label:"Hazardous", color:"var(--aqi-hazardous)" };
   }
 
+  // ---- Approximate a 10-minute-smoothed CF=1 reading --------------------
+  // The EPA correction formula is defined for the CF=1 reading, but
+  // PurpleAir's API only exposes a 10-minute average for the ATM-corrected
+  // "pm2.5" field, not CF=1. To get both the right basis (CF=1) and the
+  // right smoothing window (10-minute), we scale the instantaneous CF=1
+  // reading by the ratio between the 10-minute and instantaneous ATM
+  // readings — carrying the averaging behavior across without swapping
+  // in the wrong variant.
+  function smoothedCf1(cf1Instant, atmInstant, atm10min){
+    if (cf1Instant == null || isNaN(cf1Instant)) return null;
+    if (atmInstant == null || isNaN(atmInstant) || atmInstant <= 0) return cf1Instant;
+    if (atm10min == null || isNaN(atm10min)) return cf1Instant;
+    const ratio = atm10min / atmInstant;
+    // Guard against wild ratios from near-zero instant readings.
+    const clampedRatio = Math.max(0.5, Math.min(1.5, ratio));
+    return cf1Instant * clampedRatio;
+  }
+
   // ---- US EPA correction for PurpleAir sensors --------------------------
   // PurpleAir's own "US EPA PM2.5 AQI" layer doesn't feed raw PM2.5 straight
   // into the AQI formula — it first applies EPA's published correction,
@@ -395,7 +413,11 @@
       label: "AQI (US EPA, corrected)",
       unit: "AQI",
       getValue: s => pm25ToAqi(epaCorrectedPM25(
-        s["pm2.5_cf_1"] != null ? Number(s["pm2.5_cf_1"]) : null,
+        smoothedCf1(
+          s["pm2.5_cf_1"] != null ? Number(s["pm2.5_cf_1"]) : null,
+          s["pm2.5"] != null ? Number(s["pm2.5"]) : null,
+          s["pm2.5_10minute"] != null ? Number(s["pm2.5_10minute"]) : null
+        ),
         s.humidity != null ? Number(s.humidity) : null
       )),
       colorFor: aqiValueColor,
@@ -529,7 +551,11 @@
       });
       const valueStr = value != null ? value.toFixed(1) + " " + def.unit : "no data";
       const aqiVal = pm25ToAqi(epaCorrectedPM25(
-        s["pm2.5_cf_1"] != null ? Number(s["pm2.5_cf_1"]) : null,
+        smoothedCf1(
+          s["pm2.5_cf_1"] != null ? Number(s["pm2.5_cf_1"]) : null,
+          s["pm2.5"] != null ? Number(s["pm2.5"]) : null,
+          s["pm2.5_10minute"] != null ? Number(s["pm2.5_10minute"]) : null
+        ),
         s.humidity != null ? Number(s.humidity) : null
       ));
       marker.bindPopup(
