@@ -434,6 +434,13 @@
       maxZoom: 12,
     }).addTo(map);
     markerLayer = L.layerGroup().addTo(map);
+
+    // Leaflet sizes itself based on the container at init time; if fonts or
+    // layout above the map shift afterward, tiles can render patchily.
+    // Force a couple of resize checks after the page settles.
+    setTimeout(() => map.invalidateSize(), 200);
+    setTimeout(() => map.invalidateSize(), 800);
+    window.addEventListener("resize", () => map.invalidateSize());
   }
 
   function renderMap(sensors, paramKey){
@@ -511,6 +518,7 @@
   function render(sensors){
     latestSensors = sensors;
     renderMap(sensors, el("paramSelect").value);
+    if (map) setTimeout(() => map.invalidateSize(), 100);
 
     const withPm = sensors.filter(s => s["pm2.5"] != null && !isNaN(s["pm2.5"]));
     const count = sensors.length;
