@@ -6,7 +6,7 @@
 
 const FIELDS = [
   "sensor_index", "name", "latitude", "longitude", "last_seen",
-  "pm2.5", "pm2.5_10minute", "humidity", "temperature",
+  "pm2.5", "pm2.5_cf_1", "pm2.5_10minute", "humidity", "temperature",
 ];
 
 const NEPAL_BBOX = { nwlng: 80.0, nwlat: 30.5, selng: 88.3, selat: 26.3 };
