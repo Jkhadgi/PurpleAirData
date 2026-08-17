@@ -321,11 +321,11 @@
 
   function aqiCategory(pm){
     if (pm == null || isNaN(pm)) return { label:"no data", color:"var(--muted)" };
-    if (pm <= 12.0)   return { label:"Good", color:"var(--aqi-good)" };
+    if (pm <= 9.0)    return { label:"Good", color:"var(--aqi-good)" };
     if (pm <= 35.4)   return { label:"Moderate", color:"var(--aqi-moderate)" };
     if (pm <= 55.4)   return { label:"Unhealthy (sensitive)", color:"var(--aqi-sensitive)" };
-    if (pm <= 150.4)  return { label:"Unhealthy", color:"var(--aqi-unhealthy)" };
-    if (pm <= 250.4)  return { label:"Very unhealthy", color:"var(--aqi-very)" };
+    if (pm <= 125.4)  return { label:"Unhealthy", color:"var(--aqi-unhealthy)" };
+    if (pm <= 225.4)  return { label:"Very unhealthy", color:"var(--aqi-very)" };
     return { label:"Hazardous", color:"var(--aqi-hazardous)" };
   }
 
@@ -373,15 +373,16 @@
   }
 
   // ---- US EPA AQI conversion from PM2.5 (µg/m3) ------------------------
-  // Standard EPA breakpoint table (2012 revision), instantaneous approximation.
+  // 2024 revised EPA breakpoint table (effective May 2024), reflecting the
+  // updated annual PM2.5 standard of 9 µg/m³. Source: EPA "2024 AQI for
+  // Fine Particle Pollution" reference table.
   const AQI_BREAKPOINTS = [
-    { cLow: 0.0,   cHigh: 12.0,  iLow: 0,   iHigh: 50  },
-    { cLow: 12.1,  cHigh: 35.4,  iLow: 51,  iHigh: 100 },
+    { cLow: 0.0,   cHigh: 9.0,   iLow: 0,   iHigh: 50  },
+    { cLow: 9.1,   cHigh: 35.4,  iLow: 51,  iHigh: 100 },
     { cLow: 35.5,  cHigh: 55.4,  iLow: 101, iHigh: 150 },
-    { cLow: 55.5,  cHigh: 150.4, iLow: 151, iHigh: 200 },
-    { cLow: 150.5, cHigh: 250.4, iLow: 201, iHigh: 300 },
-    { cLow: 250.5, cHigh: 350.4, iLow: 301, iHigh: 400 },
-    { cLow: 350.5, cHigh: 500.4, iLow: 401, iHigh: 500 },
+    { cLow: 55.5,  cHigh: 125.4, iLow: 151, iHigh: 200 },
+    { cLow: 125.5, cHigh: 225.4, iLow: 201, iHigh: 300 },
+    { cLow: 225.5, cHigh: 500.4, iLow: 301, iHigh: 500 },
   ];
 
   function pm25ToAqi(pm){
