@@ -3,10 +3,10 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>PurpleAir Monitoring</title>
+<title>PurpleAir Air Quality Monitors</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet"> 
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script>
@@ -217,7 +217,7 @@
   <header class="top">
     <div>
       <p class="brand-eyebrow">PurpleAir · Real-time · Nepal</p>
-      <h1>Air quality monitors </h1>
+      <h1>PurpleAir Air Quality Monitors</h1>
       <p class="sub">PurpleAir sensors across Nepal</p>
     </div>
     <div>
@@ -453,12 +453,12 @@
       getValue: s => s["pm2.5"] != null ? Number(s["pm2.5"]) : null,
       colorFor: aqiColor,
       legend: [
-        ["Good (0–12)", "var(--aqi-good)"],
+        ["Good (0–9)", "var(--aqi-good)"],
         ["Moderate (12–35)", "var(--aqi-moderate)"],
         ["Sensitive (35–55)", "var(--aqi-sensitive)"],
-        ["Unhealthy (55–150)", "var(--aqi-unhealthy)"],
-        ["Very unhealthy (150–250)", "var(--aqi-very)"],
-        ["Hazardous (250+)", "var(--aqi-hazardous)"],
+        ["Unhealthy (55–125)", "var(--aqi-unhealthy)"],
+        ["Very unhealthy (125–225)", "var(--aqi-very)"],
+        ["Hazardous (225+)", "var(--aqi-hazardous)"],
       ],
     },
     "pm2.5_10minute": {
@@ -467,12 +467,12 @@
       getValue: s => s["pm2.5_10minute"] != null ? Number(s["pm2.5_10minute"]) : null,
       colorFor: aqiColor,
       legend: [
-        ["Good (0–12)", "var(--aqi-good)"],
+        ["Good (0–9)", "var(--aqi-good)"],
         ["Moderate (12–35)", "var(--aqi-moderate)"],
         ["Sensitive (35–55)", "var(--aqi-sensitive)"],
-        ["Unhealthy (55–150)", "var(--aqi-unhealthy)"],
-        ["Very unhealthy (150–250)", "var(--aqi-very)"],
-        ["Hazardous (250+)", "var(--aqi-hazardous)"],
+        ["Unhealthy (55–125)", "var(--aqi-unhealthy)"],
+        ["Very unhealthy (125–225)", "var(--aqi-very)"],
+        ["Hazardous (225+)", "var(--aqi-hazardous)"],
       ],
     },
     "temperature": {
@@ -499,11 +499,11 @@
 
   function aqiColorRaw(pm){
     if (pm == null || isNaN(pm)) return "#6b7c96";
-    if (pm <= 12.0)   return "#3cb44a";
+    if (pm <= 9.0)    return "#3cb44a";
     if (pm <= 35.4)   return "#f2c744";
     if (pm <= 55.4)   return "#f0982e";
-    if (pm <= 150.4)  return "#e0523f";
-    if (pm <= 250.4)  return "#9450c9";
+    if (pm <= 125.4)  return "#e0523f";
+    if (pm <= 225.4)  return "#9450c9";
     return "#7a2038";
   }
   function aqiColor(pm){ return aqiColorRaw(pm); }
