@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>PurpleAir AQ Monitoring Nepal</title>
+<title>Nepal Air Watch — Live PurpleAir Monitoring</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
@@ -332,37 +332,44 @@
   // ---- Approximate a 10-minute-smoothed CF=1 reading --------------------
   // The EPA correction formula is defined for the CF=1 reading, but
   // PurpleAir's API only exposes a 10-minute average for the ATM-corrected
-  // "pm2.5" field, not CF=1. To get both the right basis (CF=1) and the
-  // right smoothing window (10-minute), we scale the instantaneous CF=1
-  // reading by the ratio between the 10-minute and instantaneous ATM
-  // readings — carrying the averaging behavior across without swapping
-  // in the wrong variant.
-  function smoothedCf1(cf1Instant, atmInstant, atm10min){
-    if (cf1Instant == null || isNaN(cf1Instant)) return null;
-    if (atmInstant == null || isNaN(atmInstant) || atmInstant <= 0) return cf1Instant;
-    if (atm10min == null || isNaN(atm10min)) return cf1Instant;
-    const ratio = atm10min / atmInstant;
-    // Guard against wild ratios from near-zero instant readings.
-    const clampedRatio = Math.max(0.5, Math.min(1.5, ratio));
-    return cf1Instant * clampedRatio;
+  // ---- US EPA / Barkjohn PurpleAir correction (Eq. 4, full national model) --
+  // Source: Barkjohn et al. 2021 — the real published correction, used by
+  // AirNow's Fire and Smoke Map and PurpleAir's own "US EPA PM2.5 AQI" layer.
+  // Input (x) is the ATM-variant PM2.5 — specifically the LOWER of the two
+  // channel readings (channel A vs B), not the CF=1 field.
+  function barkjohnCorrectedPM25(x, rh){
+    if (x == null || isNaN(x)) return null;
+    const RH = (rh == null || isNaN(rh)) ? 50 : rh;
+    let y;
+    if (x < 30) {
+      y = 0.524 * x - 0.0862 * RH + 5.75;
+    } else if (x < 50) {
+      const t = (x / 20 - 3 / 2);
+      y = (0.786 * t + 0.524 * (1 - t)) * x - 0.0862 * RH + 5.75;
+    } else if (x < 210) {
+      y = 0.786 * x - 0.0862 * RH + 5.75;
+    } else if (x < 260) {
+      const t = (x / 50 - 21 / 5);
+      y = (0.69 * t + 0.786 * (1 - t)) * x
+        - 0.0862 * RH * (1 - t)
+        + 2.966 * t
+        + 5.75 * (1 - t)
+        + 8.84e-4 * x * x * t;
+    } else {
+      y = 2.966 + 0.69 * x + 8.84e-4 * x * x;
+    }
+    return Math.max(0, y);
   }
 
-  // ---- US EPA correction for PurpleAir sensors --------------------------
-  // PurpleAir's own "US EPA PM2.5 AQI" layer doesn't feed raw PM2.5 straight
-  // into the AQI formula — it first applies EPA's published correction,
-  // which adjusts for how low-cost optical sensors overread in humid air.
-  // Source: US EPA / AirNow "PurpleAir correction" (2021), using the
-  // sensor's CF=1 reading and relative humidity.
-  function epaCorrectedPM25(pmCf1, rh){
-    if (pmCf1 == null || isNaN(pmCf1)) return null;
-    const humidity = (rh == null || isNaN(rh)) ? 50 : rh; // fallback if humidity missing
-    let corrected;
-    if (pmCf1 <= 343) {
-      corrected = 0.52 * pmCf1 - 0.085 * humidity + 5.71;
-    } else {
-      corrected = 0.46 * pmCf1 + 0.000393 * pmCf1 * pmCf1 + 2.97;
+  // Picks the "lower channel" ATM reading per the correction's spec, falling
+  // back to the combined pm2.5 field if per-channel data isn't available.
+  function lowerChannelAtm(atmA, atmB, fallbackAtm){
+    if (atmA != null && !isNaN(atmA) && atmB != null && !isNaN(atmB)) {
+      return Math.min(atmA, atmB);
     }
-    return Math.max(0, corrected);
+    if (atmA != null && !isNaN(atmA)) return atmA;
+    if (atmB != null && !isNaN(atmB)) return atmB;
+    return fallbackAtm;
   }
 
   // ---- US EPA AQI conversion from PM2.5 (µg/m3) ------------------------
@@ -401,8 +408,12 @@
     "aqi_now": {
       label: "AQI (US EPA, real-time)",
       unit: "AQI",
-      getValue: s => pm25ToAqi(epaCorrectedPM25(
-        s["pm2.5_cf_1"] != null ? Number(s["pm2.5_cf_1"]) : null,
+      getValue: s => pm25ToAqi(barkjohnCorrectedPM25(
+        lowerChannelAtm(
+          s["pm2.5_atm_a"] != null ? Number(s["pm2.5_atm_a"]) : null,
+          s["pm2.5_atm_b"] != null ? Number(s["pm2.5_atm_b"]) : null,
+          s["pm2.5"] != null ? Number(s["pm2.5"]) : null
+        ),
         s.humidity != null ? Number(s.humidity) : null
       )),
       colorFor: aqiValueColor,
@@ -418,12 +429,11 @@
     "aqi_10min": {
       label: "AQI (US EPA, 10-min avg)",
       unit: "AQI",
-      getValue: s => pm25ToAqi(epaCorrectedPM25(
-        smoothedCf1(
-          s["pm2.5_cf_1"] != null ? Number(s["pm2.5_cf_1"]) : null,
-          s["pm2.5"] != null ? Number(s["pm2.5"]) : null,
-          s["pm2.5_10minute"] != null ? Number(s["pm2.5_10minute"]) : null
-        ),
+      // PurpleAir's pm2.5_10minute field is already the ATM-variant running
+      // average for outdoor sensors, so it can be fed straight into the
+      // correction — no extra smoothing hack needed.
+      getValue: s => pm25ToAqi(barkjohnCorrectedPM25(
+        s["pm2.5_10minute"] != null ? Number(s["pm2.5_10minute"]) : null,
         s.humidity != null ? Number(s.humidity) : null
       )),
       colorFor: aqiValueColor,
@@ -558,16 +568,16 @@
         }),
       });
       const valueStr = value != null ? value.toFixed(1) + " " + def.unit : "no data";
-      const aqiNow = pm25ToAqi(epaCorrectedPM25(
-        s["pm2.5_cf_1"] != null ? Number(s["pm2.5_cf_1"]) : null,
+      const aqiNow = pm25ToAqi(barkjohnCorrectedPM25(
+        lowerChannelAtm(
+          s["pm2.5_atm_a"] != null ? Number(s["pm2.5_atm_a"]) : null,
+          s["pm2.5_atm_b"] != null ? Number(s["pm2.5_atm_b"]) : null,
+          s["pm2.5"] != null ? Number(s["pm2.5"]) : null
+        ),
         s.humidity != null ? Number(s.humidity) : null
       ));
-      const aqi10min = pm25ToAqi(epaCorrectedPM25(
-        smoothedCf1(
-          s["pm2.5_cf_1"] != null ? Number(s["pm2.5_cf_1"]) : null,
-          s["pm2.5"] != null ? Number(s["pm2.5"]) : null,
-          s["pm2.5_10minute"] != null ? Number(s["pm2.5_10minute"]) : null
-        ),
+      const aqi10min = pm25ToAqi(barkjohnCorrectedPM25(
+        s["pm2.5_10minute"] != null ? Number(s["pm2.5_10minute"]) : null,
         s.humidity != null ? Number(s.humidity) : null
       ));
       marker.bindPopup(
@@ -683,14 +693,16 @@
       const hum = s.humidity != null ? Number(s.humidity).toFixed(0) + "%" : "—";
       const lastSeen = s.last_seen ? new Date(Number(s.last_seen)*1000) : null;
 
-      const cf1Instant = s["pm2.5_cf_1"] != null ? Number(s["pm2.5_cf_1"]) : null;
+      const atmA = s["pm2.5_atm_a"] != null ? Number(s["pm2.5_atm_a"]) : null;
+      const atmB = s["pm2.5_atm_b"] != null ? Number(s["pm2.5_atm_b"]) : null;
       const atmInstant = s["pm2.5"] != null ? Number(s["pm2.5"]) : null;
       const atm10min = s["pm2.5_10minute"] != null ? Number(s["pm2.5_10minute"]) : null;
       const rh = s.humidity != null ? Number(s.humidity) : null;
+      const lowerAtmInstant = lowerChannelAtm(atmA, atmB, atmInstant);
 
-      const aqiRtCorr = pm25ToAqi(epaCorrectedPM25(cf1Instant, rh));
+      const aqiRtCorr = pm25ToAqi(barkjohnCorrectedPM25(lowerAtmInstant, rh));
       const aqiRtRaw = pm25ToAqi(atmInstant);
-      const aqi10mCorr = pm25ToAqi(epaCorrectedPM25(smoothedCf1(cf1Instant, atmInstant, atm10min), rh));
+      const aqi10mCorr = pm25ToAqi(barkjohnCorrectedPM25(atm10min, rh));
       const aqi10mRaw = pm25ToAqi(atm10min);
 
       const aqiCell = v => v != null
